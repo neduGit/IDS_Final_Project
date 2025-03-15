@@ -1,0 +1,2349 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Load Packages
+
+```{r}
+library(tidyverse)
+library(readr)
+library(arrow)
+library(dplyr)
+library(ggplot2)
+library(caret)
+```
+
+# Load House Data and Explore
+
+```{r}
+#Load House Data
+houseData <- read_parquet("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/static_house_info.parquet")
+```
+
+```{r}
+null_values<-houseData %>% select(in.vintage) %>% is.na()
+sum(null_values)
+```
+
+```{r}
+table(houseData$in.vintage)
+```
+
+# Create Data Grouping Column
+
+```{r}
+#convert the year the house was build into 3 seperate groups
+houseData<-houseData %>% mutate(era= case_when(
+  in.vintage =="<1940" ~ "<1970",
+  in.vintage =="1940s" ~ "<1970",
+  in.vintage =="1950s" ~ "<1970",
+  in.vintage =="1960s" ~ "<1970",
+  in.vintage =="1970s" ~ "1970s-1990s",
+  in.vintage =="1980s" ~ "1970s-1990s",
+  in.vintage =="1990s" ~ "1970s-1990s",
+  in.vintage =="2000s" ~ ">2000s",
+  in.vintage =="2010s" ~ ">2000s",
+  TRUE~"Other"
+ 
+))
+```
+
+
+```{r}
+table(houseData$era)
+```
+
+```{r}
+hd_filtered <- houseData %>% select(bldg_id, in.county, era, in.sqft, in.occupants, in.roof_material, in.ducts, in.hvac_has_shared_system, in.refrigerator, in.orientation, in.geometry_stories, in.usage_level, in.bedrooms, in.clothes_dryer, in.clothes_washer, in.cooking_range, in.dishwasher,
+in.geometry_building_type_height, in.geometry_wall_type, in.heating_fuel, in.heating_setpoint, in.hvac_cooling_efficiency, in.income, in.infiltration,
+in.usage_level)
+```
+
+#Combine house data, energy data, and weather data
+
+## Data for the house era being <1970
+
+```{r}
+old_houses<-hd_filtered %>% filter(era=="<1970")
+```
+
+```{r}
+old_houses_ids<-old_houses %>% select(bldg_id)
+old_houses_ids[1,]
+```
+
+```{r}
+old_houses %>% select(bldg_id, in.county) %>% filter (bldg_id==65)
+```
+
+```{r}
+#first energy county file 
+eData_old<-read_parquet("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/65.parquet", col_select = c("out.electricity.cooling.energy_consumption", "time"))
+
+eData_old$b_id<-65
+
+#first weather file
+wData_old<-read_csv("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/G4500910.csv")
+
+wPLUSe<-merge(wData_old, eData_old, by.x="date_time", by.y="time")
+
+fh<-old_houses[1,]
+
+fullData_old<-merge(wPLUSe, fh, by.x="b_id", by.y = "bldg_id" )
+```
+
+```{r}
+old_houses_ids<-old_houses_ids %>% slice(-1)
+
+old_houses_ids<-old_houses_ids[1:1744,]
+```
+
+```{r}
+for (i in old_houses_ids){
+  
+  stringE<-as.character(i)
+  sepE<-paste0('https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/', stringE, '.parquet')
+  
+  sepE<-read_parquet(sepE, col_select = c("out.electricity.cooling.energy_consumption", "time"))
+  sepE$b_id<-i
+  
+  
+  index<-which(old_houses == i)
+  stringW<-old_houses[index,2]
+  sepW<-paste0("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/", stringW, ".csv")
+  sepW<-read_csv(sepW)
+  
+  df<-merge(sepW, sepE, by.x = "date_time", by.y = "time")
+  
+  ithHouse<-old_houses[index,]
+  #print(ithHouse)
+  
+  fd<-merge(df, ithHouse, by.x="b_id", by.y = "bldg_id" )
+  
+  fullData_old<-rbind(fullData_old, fd)
+}
+```
+
+```{r}
+julyData_old<-fullData_old %>% filter(month(date_time)==7)
+```
+
+```{r}
+write_parquet(julyData_old, "julyData_old.parquet")
+write_parquet(fullData_old, "fullData_old.parquet")
+```
+
+
+## Data for the house era being 1970s-1990s
+
+```{r}
+middle_houses<-hd_filtered %>% filter(era=="1970s-1990s")
+```
+
+```{r}
+middle_houses_ids<-middle_houses %>% select(bldg_id)
+middle_houses_ids[1,]
+```
+
+```{r}
+middle_houses %>% select(bldg_id, in.county) %>% filter (bldg_id==670)
+```
+
+```{r}
+#first energy county file 
+eData_middle<-read_parquet("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/670.parquet", col_select = c("out.electricity.cooling.energy_consumption", "time"))
+
+eData_middle$b_id<-670
+
+#first weather file
+wData_middle<-read_csv("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/G4500350.csv")
+
+wPLUSe<-merge(wData_middle, eData_middle, by.x="date_time", by.y="time")
+
+fh<-middle_houses[1,]
+
+fullData_middle<-merge(wPLUSe, fh, by.x="b_id", by.y = "bldg_id" )
+```
+
+```{r}
+middle_houses_ids<-middle_houses_ids %>% slice(-1)
+
+middle_houses_ids<-middle_houses_ids[3:2370,]
+```
+
+```{r}
+for (i in middle_houses_ids[955:length(middle_houses_ids)]){
+  
+  stringE<-as.character(i)
+  sepE<-paste0('https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/', stringE, '.parquet')
+  
+  sepE<-read_parquet(sepE, col_select = c("out.electricity.cooling.energy_consumption", "time"))
+  sepE$b_id<-i
+  
+  
+  index<-which(middle_houses == i)
+  stringW<-middle_houses[index,2]
+  sepW<-paste0("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/", stringW, ".csv")
+  sepW<-read_csv(sepW)
+  
+  df<-merge(sepW, sepE, by.x = "date_time", by.y = "time")
+  
+  ithHouse<-middle_houses[index,]
+  #print(ithHouse)
+  
+  fd<-merge(df, ithHouse, by.x="b_id", by.y = "bldg_id" )
+  
+  fullData_middle<-rbind(fullData_middle, fd)
+}
+```
+
+```{r}
+julyData_middle<-fullData_middle %>% filter(month(date_time)==7)
+```
+
+```{r}
+write_parquet(julyData_middle, "julyData_middle.parquet")
+write_parquet(fullData_middle, "fullData_middle.parquet")
+```
+
+## Data for the house era being >2000s
+
+```{r}
+new_houses<-hd_filtered %>% filter(era==">2000s")
+```
+
+```{r}
+new_houses_ids<-new_houses %>% select(bldg_id)
+new_houses_ids[1,]
+```
+
+```{r}
+new_houses %>% select(bldg_id, in.county) %>% filter (bldg_id==500)
+```
+
+```{r}
+#first energy county file 
+eData_new<-read_parquet("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/500.parquet", col_select = c("out.electricity.cooling.energy_consumption", "time"))
+
+eData_new$b_id<-500
+
+#first weather file
+wData_new<-read_csv("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/G4500710.csv")
+
+wPLUSe<-merge(wData_new, eData_new, by.x="date_time", by.y="time")
+
+fh<-new_houses[1,]
+
+fullData_new<-merge(wPLUSe, fh, by.x="b_id", by.y = "bldg_id" )
+```
+
+```{r}
+new_houses_ids<-new_houses_ids %>% slice(-1)
+
+new_houses_ids<-new_houses_ids[1:1744,]
+```
+
+```{r}
+for (i in new_houses_ids){
+  
+  stringE<-as.character(i)
+  sepE<-paste0('https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/', stringE, '.parquet')
+  
+  sepE<-read_parquet(sepE, col_select = c("out.electricity.cooling.energy_consumption", "time"))
+  sepE$b_id<-i
+  
+  
+  index<-which(new_houses == i)
+  stringW<-new_houses[index,2]
+  sepW<-paste0("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/", stringW, ".csv")
+  sepW<-read_csv(sepW)
+  
+  df<-merge(sepW, sepE, by.x = "date_time", by.y = "time")
+  
+  ithHouse<-new_houses[index,]
+  #print(ithHouse)
+  
+  fd<-merge(df, ithHouse, by.x="b_id", by.y = "bldg_id" )
+  
+  fullData_new<-rbind(fullData_new, fd)
+}
+```
+
+```{r}
+julyData_new<-fullData_new %>% filter(month(date_time)==7)
+```
+
+```{r}
+write_parquet(julyData_new, "julyData_new.parquet")
+write_parquet(fullData_new, "fullData_new.parquet")
+```
+
+## Data Analysis for eSC houses of an older make (<1970s)
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(arrow)
+library(caret)
+library(party)
+library(partykit)
+library(Metrics)
+
+houses <- read_parquet('julyData_old.parquet')
+housesV <- houses
+
+head(houses)
+```
+
+```{r}
+houses_numeric <- houses
+for (col in colnames(houses_numeric)) {
+  if (!is.numeric(houses_numeric[[col]])) {
+    houses_numeric[[col]] <- as.numeric(as.factor(houses_numeric[[col]]))
+  }
+}  
+  
+#data.frame(lapply(houses, function(x) as.numeric(as.character(x))))
+matrix <- cor(houses_numeric)
+matrix <- as.data.frame(matrix)
+matrix
+
+# corrplot(matrix, method="color")
+```
+
+## Data Manipulation
+
+```{r}
+houses$hour <- format(houses$date_time, format = '%H:%M:%S')
+houses <- houses %>% select(-era) %>% select(-in.hvac_has_shared_system)
+houses <- houses[, -1]
+houses <- houses %>% select(-date_time) %>% select(-in.county)
+
+for (col in colnames(houses)) {
+  if (!is.numeric(houses[[col]])) {
+    houses[[col]] <- as.numeric(as.factor(houses[[col]]))
+  }
+}  
+
+str(houses)
+```
+## Training and Testing Sets
+
+```{r}
+set.seed(123)
+
+train <- sample(c(TRUE, FALSE), nrow(houses), replace=TRUE, prob=c(0.7,0.3))
+train_data <- houses[train, ]  # Training data
+test_data <- houses[!train, ]  # Testing data
+```
+
+## Decision Tree
+
+```{r}
+modelTree<- ctree(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictions <- predict(modelTree, test_data, type = "response")
+
+mae(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.1663364
+rmse(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.2768326
+R2(predictions, test_data$out.electricity.cooling.energy_consumption)
+# 0.6612165
+
+colnames(test_data)
+```
+## Model Creation (Logistic Regression)
+
+```{r}
+modelLog <- glm(out.electricity.cooling.energy_consumption ~ ., gaussian, train_data)
+predictionsLog <- predict(modelLog, test_data, type = "response")
+```
+
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.2419463
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.3747597
+R2(predictionsLog, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Linear)
+
+```{r}
+modelLin <- lm(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictionsLin <- predict(modelLin, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.2419655
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.3747598
+R2(predictionsLin, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Gradient Boosting)
+
+```{r}
+library(gbm)
+
+gbm_model <- gbm(out.electricity.cooling.energy_consumption ~ ., data = train_data, distribution = "gaussian")
+predictionsGLM <- predict(gbm_model, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.2349473
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.3767427
+R2(predictionsGLM, test_data$out.electricity.cooling.energy_consumption)
+# 0.3844302
+```
+
+
+## Prepping DF for classification
+
+```{r}
+houses_class <- houses
+houses_class$out.electricity.cooling.energy_consumption <- cut(
+  houses_class$out.electricity.cooling.energy_consumption,
+  breaks = c(0, 2.6, 5.2, Inf),  
+  labels = c("Low", "Medium", "High")
+)
+```
+
+
+## Test and Training Data
+
+```{r}
+set.seed(123)
+
+train_class <- sample(c(TRUE, FALSE), nrow(houses_class), replace=TRUE, prob=c(0.7,0.3))
+train_data_class <- houses_class[train_class, ]  # Training data
+test_data_class <- houses_class[!train_class, ]  # Testing data
+```
+
+
+## Decison Tree
+
+```{r}
+#modelTreeClass <- ctree(out.electricity.cooling.energy_consumption ~ ., data = train_data_class)
+
+#nrow(train_data_class)
+#length(train_data_class$out.electricity.cooling.energy_consumption)
+
+# Step 4: Make Predictions
+#predictions <- predict(modelTreeClass, test_data_class, type = "response")
+
+# Step 5: Evaluate Classification Metrics
+# Confusion Matrix
+#conf_matrix <- table(Predicted = predictions, Actual = test_data_class$out.electricity.cooling.energy_consumption)
+#print(conf_matrix)
+
+# Accuracy
+#accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+#cat("Accuracy:", accuracy, "\n")
+```
+## Visualizations 
+
+## Square Feet
+```{r}
+ggplot(houses, aes(x = in.sqft, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Stories
+```{r}
+ggplot(houses, aes(x = in.geometry_stories, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Bedrooms
+```{r}
+ggplot(houses, aes(x = in.bedrooms, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Relative Humidity
+```{r}
+ggplot(houses, aes(x = `Relative Humidity [%]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Temperature
+```{r}
+ggplot(houses, aes(x = `Dry Bulb Temperature [°C]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income
+```{r}
+ggplot(houses, aes(x = in.income, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income + Infiltration
+```{r}
+ggplot(housesV, aes(x = in.income, fill = in.infiltration)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Income", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot") + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+
+```
+
+##
+```{r}
+data_percent2 <- housesV %>%
+  count(in.infiltration ,in.geometry_wall_type) %>%
+  group_by(in.infiltration) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent2, aes(x = in.infiltration, y = n, fill = in.geometry_wall_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 2.5) +  
+  theme_minimal() +
+  labs(x = "Infiltration Type", y = "Count", fill = "Wall Type", 
+       title = "Stacked Bar Plot with Percentages") +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+```
+## Usage + Wall Type
+```{r}
+ggplot(housesV, aes(x = in.geometry_wall_type, fill = in.usage_level)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot")
+```
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Category 2", 
+       title = "Stacked Bar Plot with Percentages")
+```
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 10000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 50000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+## Making New Data Frame to Test
+
+```{r}
+housesFive <- houses
+housesFive$`Dry Bulb Temperature [°C]` <- housesFive$`Dry Bulb Temperature [°C]` + 5
+```
+
+## Using Model to Make Predictions
+```{r}
+predictionsFive <- predict(modelTree, housesFive, type = "response") 
+
+head(predictionsFive)
+```
+
+
+## Add Predictions to the Table and Find Percent Change
+```{r}
+housesFive$Energy_consumption_prediction <- predictionsFive
+housesFive$Energy_consumption_percent_change <- housesFive$percent_change <- ifelse(
+  housesVFive$out.electricity.cooling.energy_consumption > 0,
+  housesFive$Energy_consumption_prediction / housesVFive$out.electricity.cooling.energy_consumption,
+  NA
+)
+avgChange <- mean(housesFive$Energy_consumption_percent_change, na.rm = TRUE)
+print(avgChange)
+housesVFive <- housesV
+housesVFive$Energy_consumption_prediction <- predictionsFive
+
+
+average_consumption <- housesVFive %>%
+  group_by(in.county) %>%
+  summarise(avg_energy_consumption = mean(Energy_consumption_prediction, na.rm = TRUE))
+colnames(houses)
+
+
+wall_type_counts <- housesVFive %>%
+  count(in.geometry_wall_type)
+
+wall_type_counts
+
+var_importance <- varimp(modelTree)
+print(var_importance)
+```
+```{r}
+ggplot(houses, aes(x = hour, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+
+## Data Analysis for eSC houses of an older make (<19702)
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(arrow)
+library(caret)
+library(party)
+library(partykit)
+library(Metrics)
+
+houses <- read_parquet('fullData_old.parquet')
+housesV <- houses
+housesJuly <- houses[format(houses$date_time, "%m") == "07", ]
+
+head(houses)
+```
+
+```{r}
+houses_numeric <- houses
+for (col in colnames(houses_numeric)) {
+  if (!is.numeric(houses_numeric[[col]])) {
+    houses_numeric[[col]] <- as.numeric(as.factor(houses_numeric[[col]]))
+  }
+}  
+  
+#data.frame(lapply(houses, function(x) as.numeric(as.character(x))))
+matrix <- cor(houses_numeric)
+matrix <- as.data.frame(matrix)
+matrix
+
+# corrplot(matrix, method="color")
+```
+
+## Data Manipulation
+
+```{r}
+houses$hour <- format(houses$date_time, format = '%H:%M:%S')
+houses <- houses %>% select(-era) %>% select(-in.hvac_has_shared_system)
+houses <- houses[, -1]
+houses <- houses %>% select(-date_time) %>% select(-in.county)
+
+housesJuly <- housesJuly %>% select(-era) %>% select(-in.hvac_has_shared_system)
+housesJuly <- housesJuly[, -1]
+housesJuly <- housesJuly %>% select(-date_time) %>% select(-in.county)
+
+for (col in colnames(houses)) {
+  if (!is.numeric(houses[[col]])) {
+    houses[[col]] <- as.numeric(as.factor(houses[[col]]))
+  }
+}  
+
+for (col in colnames(housesJuly)) {
+  if (!is.numeric(housesJuly[[col]])) {
+    housesJuly[[col]] <- as.numeric(as.factor(housesJuly[[col]]))
+  }
+}  
+
+str(houses)
+```
+## Training and Testing Sets
+
+```{r}
+set.seed(123)
+
+train <- sample(c(TRUE, FALSE), nrow(houses), replace=TRUE, prob=c(0.7,0.3))
+train_data <- houses[train, ]  # Training data
+test_data <- houses[!train, ]  # Testing data
+```
+
+## Decision Tree
+
+```{r}
+modelTree<- ctree(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictions <- predict(modelTree, test_data, type = "response")
+
+mae(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.1663364
+rmse(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.2768326
+R2(predictions, test_data$out.electricity.cooling.energy_consumption)
+# 0.6612165
+
+colnames(test_data)
+```
+## Model Creation (Logistic Regression)
+
+```{r}
+modelLog <- glm(out.electricity.cooling.energy_consumption ~ ., gaussian, train_data)
+predictionsLog <- predict(modelLog, test_data, type = "response")
+```
+
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.2419463
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.3747597
+R2(predictionsLog, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Linear)    v   
+
+```{r}
+modelLin <- lm(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictionsLin <- predict(modelLin, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.2419655
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.3747598
+R2(predictionsLin, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Gradient Boosting)
+
+```{r}
+library(gbm)
+
+gbm_model <- gbm(out.electricity.cooling.energy_consumption ~ ., data = train_data, distribution = "gaussian")
+predictionsGLM <- predict(gbm_model, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.2349473
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.3767427
+R2(predictionsGLM, test_data$out.electricity.cooling.energy_consumption)
+# 0.3844302
+```
+
+
+## Visualizations 
+
+## Square Feet
+```{r}
+ggplot(houses, aes(x = in.sqft, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Stories
+```{r}
+ggplot(houses, aes(x = in.geometry_stories, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Bedrooms
+```{r}
+ggplot(houses, aes(x = in.bedrooms, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Relative Humidity
+```{r}
+ggplot(houses, aes(x = `Relative Humidity [%]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Temperature
+```{r}
+ggplot(houses, aes(x = `Dry Bulb Temperature [°C]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income
+```{r}
+ggplot(houses, aes(x = in.income, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income + Infiltration
+```{r}
+ggplot(housesV, aes(x = in.income, fill = in.infiltration)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Income", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot") + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+
+```
+
+##
+```{r}
+data_percent2 <- housesV %>%
+  count(in.infiltration ,in.geometry_wall_type) %>%
+  group_by(in.infiltration) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent2, aes(x = in.infiltration, y = n, fill = in.geometry_wall_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 2.5) +  
+  theme_minimal() +
+  labs(x = "Infiltration Type", y = "Count", fill = "Wall Type", 
+       title = "Stacked Bar Plot with Percentages") +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+```
+## Usage + Wall Type
+```{r}
+ggplot(housesV, aes(x = in.geometry_wall_type, fill = in.usage_level)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Category 2", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 10000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 50000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+## Making New Data Frame to Test
+
+```{r}
+housesFive <- housesJuly
+housesFive$`Dry Bulb Temperature [°C]` <- housesFive$`Dry Bulb Temperature [°C]` + 5
+```
+
+## Using Model to Make Predictions
+```{r}
+predictionsFive <- predict(modelTree, housesFive, type = "response") 
+
+head(predictionsFive)
+```
+
+
+## Add Predictions to the Table
+```{r}
+housesFive$Energy_consumption_prediction <- predictionsFive
+housesVFive <- housesV
+housesVFive$Energy_consumption_prediction <- predictionsFive
+
+average_consumption <- housesVFive %>%
+  group_by(in.county) %>%
+  summarise(avg_energy_consumption = mean(Energy_consumption_prediction, na.rm = TRUE))
+colnames(houses)
+
+
+wall_type_counts <- housesVFive %>%
+  count(in.geometry_wall_type)
+
+wall_type_counts
+
+var_importance <- varimp(modelTree)
+print(var_importance)
+```
+
+```{r}
+ggplot(houses, aes(x = hour, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+
+## Data Analysis for eSC houses of a middle make (1970s-1990s)
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(arrow)
+library(caret)
+library(party)
+library(partykit)
+library(Metrics)
+
+houses <- read_parquet('julyData_middle.parquet')
+housesV <- houses
+
+head(houses)
+```
+
+```{r}
+houses_numeric <- houses
+for (col in colnames(houses_numeric)) {
+  if (!is.numeric(houses_numeric[[col]])) {
+    houses_numeric[[col]] <- as.numeric(as.factor(houses_numeric[[col]]))
+  }
+}  
+  
+#data.frame(lapply(houses, function(x) as.numeric(as.character(x))))
+matrix <- cor(houses_numeric)
+matrix <- as.data.frame(matrix)
+matrix
+
+# corrplot(matrix, method="color")
+```
+
+## Data Manipulation
+
+```{r}
+houses$hour <- format(houses$date_time, format = '%H:%M:%S')
+houses <- houses %>% select(-era) %>% select(-in.hvac_has_shared_system)
+houses <- houses[, -1]
+houses <- houses %>% select(-date_time) %>% select(-in.county)
+
+for (col in colnames(houses)) {
+  if (!is.numeric(houses[[col]])) {
+    houses[[col]] <- as.numeric(as.factor(houses[[col]]))
+  }
+}  
+
+str(houses)
+```
+## Training and Testing Sets
+
+```{r}
+set.seed(123)
+
+train <- sample(c(TRUE, FALSE), nrow(houses), replace=TRUE, prob=c(0.7,0.3))
+train_data <- houses[train, ]  # Training data
+test_data <- houses[!train, ]  # Testing data
+```
+
+## Decision Tree
+
+```{r}
+modelTree<- ctree(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictions <- predict(modelTree, test_data, type = "response")
+
+mae(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.1663364
+rmse(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.2768326
+R2(predictions, test_data$out.electricity.cooling.energy_consumption)
+# 0.6612165
+
+colnames(test_data)
+```
+## Model Creation (Logistic Regression)
+
+```{r}
+modelLog <- glm(out.electricity.cooling.energy_consumption ~ ., gaussian, train_data)
+predictionsLog <- predict(modelLog, test_data, type = "response")
+```
+
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.2419463
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.3747597
+R2(predictionsLog, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Linear)
+
+```{r}
+modelLin <- lm(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictionsLin <- predict(modelLin, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.2419655
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.3747598
+R2(predictionsLin, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Gradient Boosting)
+
+```{r}
+library(gbm)
+
+gbm_model <- gbm(out.electricity.cooling.energy_consumption ~ ., data = train_data, distribution = "gaussian")
+predictionsGLM <- predict(gbm_model, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.2349473
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.3767427
+R2(predictionsGLM, test_data$out.electricity.cooling.energy_consumption)
+# 0.3844302
+```
+
+
+## Prepping DF for classification
+
+```{r}
+houses_class <- houses
+houses_class$out.electricity.cooling.energy_consumption <- cut(
+  houses_class$out.electricity.cooling.energy_consumption,
+  breaks = c(0, 2.6, 5.2, Inf),  
+  labels = c("Low", "Medium", "High")
+)
+```
+
+
+## Test and Training Data
+
+```{r}
+set.seed(123)
+
+train_class <- sample(c(TRUE, FALSE), nrow(houses_class), replace=TRUE, prob=c(0.7,0.3))
+train_data_class <- houses_class[train_class, ]  # Training data
+test_data_class <- houses_class[!train_class, ]  # Testing data
+```
+
+
+## Decison Tree
+
+```{r}
+#modelTreeClass <- ctree(out.electricity.cooling.energy_consumption ~ ., data = train_data_class)
+
+#nrow(train_data_class)
+#length(train_data_class$out.electricity.cooling.energy_consumption)
+
+# Step 4: Make Predictions
+#predictions <- predict(modelTreeClass, test_data_class, type = "response")
+
+# Step 5: Evaluate Classification Metrics
+# Confusion Matrix
+#conf_matrix <- table(Predicted = predictions, Actual = test_data_class$out.electricity.cooling.energy_consumption)
+#print(conf_matrix)
+
+# Accuracy
+#accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+#cat("Accuracy:", accuracy, "\n")
+```
+## Visualizations 
+
+## Square Feet
+```{r}
+ggplot(houses, aes(x = in.sqft, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Stories
+```{r}
+ggplot(houses, aes(x = in.geometry_stories, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Bedrooms
+```{r}
+ggplot(houses, aes(x = in.bedrooms, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Relative Humidity
+```{r}
+ggplot(houses, aes(x = `Relative Humidity [%]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Temperature
+```{r}
+ggplot(houses, aes(x = `Dry Bulb Temperature [°C]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income
+```{r}
+ggplot(houses, aes(x = in.income, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income + Infiltration
+```{r}
+ggplot(housesV, aes(x = in.income, fill = in.infiltration)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Income", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot") + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+
+```
+
+##
+```{r}
+data_percent2 <- housesV %>%
+  count(in.infiltration ,in.geometry_wall_type) %>%
+  group_by(in.infiltration) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent2, aes(x = in.infiltration, y = n, fill = in.geometry_wall_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 2.5) +  
+  theme_minimal() +
+  labs(x = "Infiltration Type", y = "Count", fill = "Wall Type", 
+       title = "Stacked Bar Plot with Percentages") +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+```
+## Usage + Wall Type
+```{r}
+ggplot(housesV, aes(x = in.geometry_wall_type, fill = in.usage_level)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot")
+```
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Category 2", 
+       title = "Stacked Bar Plot with Percentages")
+```
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 10000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 50000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+## Making New Data Frame to Test
+
+```{r}
+housesFive <- houses
+housesFive$`Dry Bulb Temperature [°C]` <- housesFive$`Dry Bulb Temperature [°C]` + 5
+```
+
+## Using Model to Make Predictions
+```{r}
+predictionsFive <- predict(modelTree, housesFive, type = "response") 
+
+head(predictionsFive)
+```
+
+
+## Add Predictions to the Table and Find Percent Change
+```{r}
+housesFive$Energy_consumption_prediction <- predictionsFive
+housesFive$Energy_consumption_percent_change <- housesFive$percent_change <- ifelse(
+  housesVFive$out.electricity.cooling.energy_consumption > 0,
+  housesFive$Energy_consumption_prediction / housesVFive$out.electricity.cooling.energy_consumption,
+  NA
+)
+avgChange <- mean(housesFive$Energy_consumption_percent_change, na.rm = TRUE)
+print(avgChange)
+housesVFive <- housesV
+housesVFive$Energy_consumption_prediction <- predictionsFive
+
+
+average_consumption <- housesVFive %>%
+  group_by(in.county) %>%
+  summarise(avg_energy_consumption = mean(Energy_consumption_prediction, na.rm = TRUE))
+colnames(houses)
+
+
+wall_type_counts <- housesVFive %>%
+  count(in.geometry_wall_type)
+
+wall_type_counts
+
+var_importance <- varimp(modelTree)
+print(var_importance)
+```
+```{r}
+ggplot(houses, aes(x = hour, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+
+## Data Analysis for eSC houses of a middle make (1970s-1990s)
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(arrow)
+library(caret)
+library(party)
+library(partykit)
+library(Metrics)
+
+houses <- read_parquet('fullData_middle.parquet')
+housesV <- houses
+
+head(houses)
+```
+
+```{r}
+houses_numeric <- houses
+for (col in colnames(houses_numeric)) {
+  if (!is.numeric(houses_numeric[[col]])) {
+    houses_numeric[[col]] <- as.numeric(as.factor(houses_numeric[[col]]))
+  }
+}  
+  
+#data.frame(lapply(houses, function(x) as.numeric(as.character(x))))
+matrix <- cor(houses_numeric)
+matrix <- as.data.frame(matrix)
+matrix
+
+# corrplot(matrix, method="color")
+```
+
+## Data Manipulation
+
+```{r}
+houses$hour <- format(houses$date_time, format = '%H:%M:%S')
+houses <- houses %>% select(-era) %>% select(-in.hvac_has_shared_system)
+houses <- houses[, -1]
+houses <- houses %>% select(-date_time) %>% select(-in.county)
+
+for (col in colnames(houses)) {
+  if (!is.numeric(houses[[col]])) {
+    houses[[col]] <- as.numeric(as.factor(houses[[col]]))
+  }
+}  
+
+str(houses)
+```
+## Training and Testing Sets
+
+```{r}
+set.seed(123)
+
+train <- sample(c(TRUE, FALSE), nrow(houses), replace=TRUE, prob=c(0.7,0.3))
+train_data <- houses[train, ]  # Training data
+test_data <- houses[!train, ]  # Testing data
+```
+
+## Decision Tree
+
+```{r}
+modelTree<- ctree(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictions <- predict(modelTree, test_data, type = "response")
+
+mae(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.1663364
+rmse(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.2768326
+R2(predictions, test_data$out.electricity.cooling.energy_consumption)
+# 0.6612165
+
+colnames(test_data)
+```
+## Model Creation (Logistic Regression)
+
+```{r}
+modelLog <- glm(out.electricity.cooling.energy_consumption ~ ., gaussian, train_data)
+predictionsLog <- predict(modelLog, test_data, type = "response")
+```
+
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.2419463
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.3747597
+R2(predictionsLog, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Linear)
+
+```{r}
+modelLin <- lm(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictionsLin <- predict(modelLin, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.2419655
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.3747598
+R2(predictionsLin, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Gradient Boosting)
+
+```{r}
+library(gbm)
+
+gbm_model <- gbm(out.electricity.cooling.energy_consumption ~ ., data = train_data, distribution = "gaussian")
+predictionsGLM <- predict(gbm_model, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.2349473
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.3767427
+R2(predictionsGLM, test_data$out.electricity.cooling.energy_consumption)
+# 0.3844302
+```
+
+
+## Prepping DF for classification
+
+```{r}
+houses_class <- houses
+houses_class$out.electricity.cooling.energy_consumption <- cut(
+  houses_class$out.electricity.cooling.energy_consumption,
+  breaks = c(0, 2.6, 5.2, Inf),  
+  labels = c("Low", "Medium", "High")
+)
+```
+
+
+## Test and Training Data
+
+```{r}
+set.seed(123)
+
+train_class <- sample(c(TRUE, FALSE), nrow(houses_class), replace=TRUE, prob=c(0.7,0.3))
+train_data_class <- houses_class[train_class, ]  # Training data
+test_data_class <- houses_class[!train_class, ]  # Testing data
+```
+
+
+## Decison Tree
+
+```{r}
+#modelTreeClass <- ctree(out.electricity.cooling.energy_consumption ~ ., data = train_data_class)
+
+#nrow(train_data_class)
+#length(train_data_class$out.electricity.cooling.energy_consumption)
+
+# Step 4: Make Predictions
+#predictions <- predict(modelTreeClass, test_data_class, type = "response")
+
+# Step 5: Evaluate Classification Metrics
+# Confusion Matrix
+#conf_matrix <- table(Predicted = predictions, Actual = test_data_class$out.electricity.cooling.energy_consumption)
+#print(conf_matrix)
+
+# Accuracy
+#accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+#cat("Accuracy:", accuracy, "\n")
+```
+## Visualizations 
+
+## Square Feet
+```{r}
+ggplot(houses, aes(x = in.sqft, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Stories
+```{r}
+ggplot(houses, aes(x = in.geometry_stories, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Bedrooms
+```{r}
+ggplot(houses, aes(x = in.bedrooms, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Relative Humidity
+```{r}
+ggplot(houses, aes(x = `Relative Humidity [%]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Temperature
+```{r}
+ggplot(houses, aes(x = `Dry Bulb Temperature [°C]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income
+```{r}
+ggplot(houses, aes(x = in.income, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income + Infiltration
+```{r}
+ggplot(housesV, aes(x = in.income, fill = in.infiltration)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Income", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot") + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+
+```
+
+##
+```{r}
+data_percent2 <- housesV %>%
+  count(in.infiltration ,in.geometry_wall_type) %>%
+  group_by(in.infiltration) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent2, aes(x = in.infiltration, y = n, fill = in.geometry_wall_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 2.5) +  
+  theme_minimal() +
+  labs(x = "Infiltration Type", y = "Count", fill = "Wall Type", 
+       title = "Stacked Bar Plot with Percentages") +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+```
+## Usage + Wall Type
+```{r}
+ggplot(housesV, aes(x = in.geometry_wall_type, fill = in.usage_level)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot")
+```
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Category 2", 
+       title = "Stacked Bar Plot with Percentages")
+```
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 10000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 50000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+## Making New Data Frame to Test
+
+```{r}
+housesFive <- houses
+housesFive$`Dry Bulb Temperature [°C]` <- housesFive$`Dry Bulb Temperature [°C]` + 5
+```
+
+## Using Model to Make Predictions
+```{r}
+predictionsFive <- predict(modelTree, housesFive, type = "response") 
+
+head(predictionsFive)
+```
+
+
+## Add Predictions to the Table and Find Percent Change
+```{r}
+housesFive$Energy_consumption_prediction <- predictionsFive
+housesFive$Energy_consumption_percent_change <- housesFive$percent_change <- ifelse(
+  housesVFive$out.electricity.cooling.energy_consumption > 0,
+  housesFive$Energy_consumption_prediction / housesVFive$out.electricity.cooling.energy_consumption,
+  NA
+)
+avgChange <- mean(housesFive$Energy_consumption_percent_change, na.rm = TRUE)
+print(avgChange)
+housesVFive <- housesV
+housesVFive$Energy_consumption_prediction <- predictionsFive
+
+
+average_consumption <- housesVFive %>%
+  group_by(in.county) %>%
+  summarise(avg_energy_consumption = mean(Energy_consumption_prediction, na.rm = TRUE))
+colnames(houses)
+
+
+wall_type_counts <- housesVFive %>%
+  count(in.geometry_wall_type)
+
+wall_type_counts
+
+var_importance <- varimp(modelTree)
+print(var_importance)
+```
+```{r}
+ggplot(houses, aes(x = hour, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+
+## Data Analysis for eSC houses of a newer make (>2000s)
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(arrow)
+library(caret)
+library(party)
+library(partykit)
+library(Metrics)
+
+houses <- read_parquet('julyData_new.parquet')
+housesV <- houses
+
+head(houses)
+```
+
+```{r}
+houses_numeric <- houses
+for (col in colnames(houses_numeric)) {
+  if (!is.numeric(houses_numeric[[col]])) {
+    houses_numeric[[col]] <- as.numeric(as.factor(houses_numeric[[col]]))
+  }
+}  
+  
+#data.frame(lapply(houses, function(x) as.numeric(as.character(x))))
+matrix <- cor(houses_numeric)
+matrix <- as.data.frame(matrix)
+matrix
+
+# corrplot(matrix, method="color")
+```
+
+## Data Manipulation
+
+```{r}
+houses$hour <- format(houses$date_time, format = '%H:%M:%S')
+houses <- houses %>% select(-era) %>% select(-in.hvac_has_shared_system)
+houses <- houses[, -1]
+houses <- houses %>% select(-date_time) %>% select(-in.county)
+
+for (col in colnames(houses)) {
+  if (!is.numeric(houses[[col]])) {
+    houses[[col]] <- as.numeric(as.factor(houses[[col]]))
+  }
+}  
+
+str(houses)
+```
+## Training and Testing Sets
+
+```{r}
+set.seed(123)
+
+train <- sample(c(TRUE, FALSE), nrow(houses), replace=TRUE, prob=c(0.7,0.3))
+train_data <- houses[train, ]  # Training data
+test_data <- houses[!train, ]  # Testing data
+```
+
+## Decision Tree
+
+```{r}
+modelTree<- ctree(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictions <- predict(modelTree, test_data, type = "response")
+
+mae(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.1663364
+rmse(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.2768326
+R2(predictions, test_data$out.electricity.cooling.energy_consumption)
+# 0.6612165
+
+colnames(test_data)
+```
+## Model Creation (Logistic Regression)
+
+```{r}
+modelLog <- glm(out.electricity.cooling.energy_consumption ~ ., gaussian, train_data)
+predictionsLog <- predict(modelLog, test_data, type = "response")
+```
+
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.2419463
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.3747597
+R2(predictionsLog, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Linear)
+
+```{r}
+modelLin <- lm(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictionsLin <- predict(modelLin, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.2419655
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.3747598
+R2(predictionsLin, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Gradient Boosting)
+
+```{r}
+library(gbm)
+
+gbm_model <- gbm(out.electricity.cooling.energy_consumption ~ ., data = train_data, distribution = "gaussian")
+predictionsGLM <- predict(gbm_model, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.2349473
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.3767427
+R2(predictionsGLM, test_data$out.electricity.cooling.energy_consumption)
+# 0.3844302
+```
+
+
+## Prepping DF for classification
+
+```{r}
+houses_class <- houses
+houses_class$out.electricity.cooling.energy_consumption <- cut(
+  houses_class$out.electricity.cooling.energy_consumption,
+  breaks = c(0, 2.6, 5.2, Inf),  
+  labels = c("Low", "Medium", "High")
+)
+```
+
+
+## Test and Training Data
+
+```{r}
+set.seed(123)
+
+train_class <- sample(c(TRUE, FALSE), nrow(houses_class), replace=TRUE, prob=c(0.7,0.3))
+train_data_class <- houses_class[train_class, ]  # Training data
+test_data_class <- houses_class[!train_class, ]  # Testing data
+```
+
+
+## Decison Tree
+
+```{r}
+#modelTreeClass <- ctree(out.electricity.cooling.energy_consumption ~ ., data = train_data_class)
+
+#nrow(train_data_class)
+#length(train_data_class$out.electricity.cooling.energy_consumption)
+
+# Step 4: Make Predictions
+#predictions <- predict(modelTreeClass, test_data_class, type = "response")
+
+# Step 5: Evaluate Classification Metrics
+# Confusion Matrix
+#conf_matrix <- table(Predicted = predictions, Actual = test_data_class$out.electricity.cooling.energy_consumption)
+#print(conf_matrix)
+
+# Accuracy
+#accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+#cat("Accuracy:", accuracy, "\n")
+```
+## Visualizations 
+
+## Square Feet
+```{r}
+ggplot(houses, aes(x = in.sqft, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Stories
+```{r}
+ggplot(houses, aes(x = in.geometry_stories, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Bedrooms
+```{r}
+ggplot(houses, aes(x = in.bedrooms, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Relative Humidity
+```{r}
+ggplot(houses, aes(x = `Relative Humidity [%]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Temperature
+```{r}
+ggplot(houses, aes(x = `Dry Bulb Temperature [°C]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income
+```{r}
+ggplot(houses, aes(x = in.income, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income + Infiltration
+```{r}
+ggplot(housesV, aes(x = in.income, fill = in.infiltration)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Income", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot") + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+
+```
+
+##
+```{r}
+data_percent2 <- housesV %>%
+  count(in.infiltration ,in.geometry_wall_type) %>%
+  group_by(in.infiltration) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent2, aes(x = in.infiltration, y = n, fill = in.geometry_wall_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 2.5) +  
+  theme_minimal() +
+  labs(x = "Infiltration Type", y = "Count", fill = "Wall Type", 
+       title = "Stacked Bar Plot with Percentages") +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+```
+## Usage + Wall Type
+```{r}
+ggplot(housesV, aes(x = in.geometry_wall_type, fill = in.usage_level)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot")
+```
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Category 2", 
+       title = "Stacked Bar Plot with Percentages")
+```
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 10000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 50000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+## Making New Data Frame to Test
+
+```{r}
+housesFive <- houses
+housesFive$`Dry Bulb Temperature [°C]` <- housesFive$`Dry Bulb Temperature [°C]` + 5
+```
+
+## Using Model to Make Predictions
+```{r}
+predictionsFive <- predict(modelTree, housesFive, type = "response") 
+
+head(predictionsFive)
+```
+
+
+## Add Predictions to the Table and Find Percent Change
+```{r}
+housesFive$Energy_consumption_prediction <- predictionsFive
+housesFive$Energy_consumption_percent_change <- housesFive$percent_change <- ifelse(
+  housesVFive$out.electricity.cooling.energy_consumption > 0,
+  housesFive$Energy_consumption_prediction / housesVFive$out.electricity.cooling.energy_consumption,
+  NA
+)
+avgChange <- mean(housesFive$Energy_consumption_percent_change, na.rm = TRUE)
+print(avgChange)
+housesVFive <- housesV
+housesVFive$Energy_consumption_prediction <- predictionsFive
+
+
+average_consumption <- housesVFive %>%
+  group_by(in.county) %>%
+  summarise(avg_energy_consumption = mean(Energy_consumption_prediction, na.rm = TRUE))
+colnames(houses)
+
+
+wall_type_counts <- housesVFive %>%
+  count(in.geometry_wall_type)
+
+wall_type_counts
+
+var_importance <- varimp(modelTree)
+print(var_importance)
+```
+```{r}
+ggplot(houses, aes(x = hour, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+
+## Data Analysis for eSC houses of a newer make (>2000s)
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(arrow)
+library(caret)
+library(party)
+library(partykit)
+library(Metrics)
+
+houses <- read_parquet('fullData_new.parquet')
+housesV <- houses
+housesJuly <- houses[format(houses$date_time, "%m") == "07", ]
+
+head(houses)
+```
+
+```{r}
+houses_numeric <- houses
+for (col in colnames(houses_numeric)) {
+  if (!is.numeric(houses_numeric[[col]])) {
+    houses_numeric[[col]] <- as.numeric(as.factor(houses_numeric[[col]]))
+  }
+}  
+  
+#data.frame(lapply(houses, function(x) as.numeric(as.character(x))))
+matrix <- cor(houses_numeric)
+matrix <- as.data.frame(matrix)
+matrix
+
+# corrplot(matrix, method="color")
+```
+
+## Data Manipulation
+
+```{r}
+houses$hour <- format(houses$date_time, format = '%H:%M:%S')
+houses <- houses %>% select(-era) %>% select(-in.hvac_has_shared_system)
+houses <- houses[, -1]
+houses <- houses %>% select(-date_time) %>% select(-in.county)
+
+housesJuly <- housesJuly %>% select(-era) %>% select(-in.hvac_has_shared_system)
+housesJuly <- housesJuly[, -1]
+housesJuly <- housesJuly %>% select(-date_time) %>% select(-in.county)
+
+for (col in colnames(houses)) {
+  if (!is.numeric(houses[[col]])) {
+    houses[[col]] <- as.numeric(as.factor(houses[[col]]))
+  }
+}  
+
+for (col in colnames(housesJuly)) {
+  if (!is.numeric(housesJuly[[col]])) {
+    housesJuly[[col]] <- as.numeric(as.factor(housesJuly[[col]]))
+  }
+}  
+
+str(houses)
+```
+## Training and Testing Sets
+
+```{r}
+set.seed(123)
+
+train <- sample(c(TRUE, FALSE), nrow(houses), replace=TRUE, prob=c(0.7,0.3))
+train_data <- houses[train, ]  # Training data
+test_data <- houses[!train, ]  # Testing data
+```
+
+## Decision Tree
+
+```{r}
+modelTree<- ctree(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictions <- predict(modelTree, test_data, type = "response")
+
+mae(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.1663364
+rmse(test_data$out.electricity.cooling.energy_consumption, predictions)
+# 0.2768326
+R2(predictions, test_data$out.electricity.cooling.energy_consumption)
+# 0.6612165
+
+colnames(test_data)
+```
+## Model Creation (Logistic Regression)
+
+```{r}
+modelLog <- glm(out.electricity.cooling.energy_consumption ~ ., gaussian, train_data)
+predictionsLog <- predict(modelLog, test_data, type = "response")
+```
+
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.2419463
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLog)
+# 0.3747597
+R2(predictionsLog, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Linear)    v   
+
+```{r}
+modelLin <- lm(out.electricity.cooling.energy_consumption ~ ., train_data)
+predictionsLin <- predict(modelLin, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.2419655
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsLin)
+# 0.3747598
+R2(predictionsLin, test_data$out.electricity.cooling.energy_consumption)
+# 0.3781606
+```
+## Model Creation (Gradient Boosting)
+
+```{r}
+library(gbm)
+
+gbm_model <- gbm(out.electricity.cooling.energy_consumption ~ ., data = train_data, distribution = "gaussian")
+predictionsGLM <- predict(gbm_model, test_data, type = "response")
+```
+
+```{r}
+mae(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.2349473
+rmse(test_data$out.electricity.cooling.energy_consumption, predictionsGLM)
+# 0.3767427
+R2(predictionsGLM, test_data$out.electricity.cooling.energy_consumption)
+# 0.3844302
+```
+
+
+## Visualizations 
+
+## Square Feet
+```{r}
+ggplot(houses, aes(x = in.sqft, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Stories
+```{r}
+ggplot(houses, aes(x = in.geometry_stories, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Bedrooms
+```{r}
+ggplot(houses, aes(x = in.bedrooms, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Relative Humidity
+```{r}
+ggplot(houses, aes(x = `Relative Humidity [%]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Temperature
+```{r}
+ggplot(houses, aes(x = `Dry Bulb Temperature [°C]`, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income
+```{r}
+ggplot(houses, aes(x = in.income, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+## Income + Infiltration
+```{r}
+ggplot(housesV, aes(x = in.income, fill = in.infiltration)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Income", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot") + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+
+```
+
+##
+```{r}
+data_percent2 <- housesV %>%
+  count(in.infiltration ,in.geometry_wall_type) %>%
+  group_by(in.infiltration) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent2, aes(x = in.infiltration, y = n, fill = in.geometry_wall_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 2.5) +  
+  theme_minimal() +
+  labs(x = "Infiltration Type", y = "Count", fill = "Wall Type", 
+       title = "Stacked Bar Plot with Percentages") +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate and adjust size
+    axis.title.x = element_text(size = 12),  # Adjust axis title size
+    axis.title.y = element_text(size = 12)
+  )
+```
+## Usage + Wall Type
+```{r}
+ggplot(housesV, aes(x = in.geometry_wall_type, fill = in.usage_level)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Count", fill = "Infiltration Type",
+       title = "Stacked Bar Plot")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Category 2", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 10000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+```{r}
+data_percent <- housesV %>%
+  count(in.geometry_wall_type, in.usage_level) %>%
+  group_by(in.geometry_wall_type) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+ggplot(data_percent, aes(x = in.geometry_wall_type, y = n, fill = in.usage_level)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "white", size = 4) +  
+  scale_y_continuous(limits = c(0, 50000), expand = c(0, 0)) +
+  theme_minimal() +
+  labs(x = "Wall Type", y = "Relative Usage Level", fill = "Infiltration Type", 
+       title = "Stacked Bar Plot with Percentages")
+```
+
+## Making New Data Frame to Test
+
+```{r}
+housesFive <- housesJuly
+housesFive$`Dry Bulb Temperature [°C]` <- housesFive$`Dry Bulb Temperature [°C]` + 5
+```
+
+## Using Model to Make Predictions
+```{r}
+predictionsFive <- predict(modelTree, housesFive, type = "response") 
+
+head(predictionsFive)
+```
+
+
+## Add Predictions to the Table
+```{r}
+housesFive$Energy_consumption_prediction <- predictionsFive
+housesVFive <- housesV
+housesVFive$Energy_consumption_prediction <- predictionsFive
+
+average_consumption <- housesVFive %>%
+  group_by(in.county) %>%
+  summarise(avg_energy_consumption = mean(Energy_consumption_prediction, na.rm = TRUE))
+colnames(houses)
+
+
+wall_type_counts <- housesVFive %>%
+  count(in.geometry_wall_type)
+
+wall_type_counts
+
+var_importance <- varimp(modelTree)
+print(var_importance)
+```
+
+```{r}
+ggplot(houses, aes(x = hour, y = out.electricity.cooling.energy_consumption)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_minimal()
+```
+
